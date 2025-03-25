@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeDisplay } from './QRCodeDisplay';
 import api from '../services/api';
 import { useSocket } from '../hooks/useSocket';
@@ -13,6 +14,7 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
+  const [showAlert, setShowAlert] = useState(false);
   const socket = useSocket();
 
   useEffect(() => {
@@ -31,7 +33,8 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
       setQrCode(qr);
       setIsModalOpen(true);
       setIsConnected(false);
-      setIsChecking(false); // Finaliza o estado "Analisando" quando o QR Code é recebido
+      setIsChecking(false);
+      setShowAlert(false);
     });
 
     socket.on('whatsappReady', () => {
@@ -39,18 +42,21 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
       setIsModalOpen(false);
       setQrCode(null);
       setIsConnected(true);
-      setIsChecking(false); // Finaliza o estado "Analisando"
+      setIsChecking(false);
+      setShowAlert(true);
+      setTimeout(() => setShowAlert(false), 3000);
     });
 
     socket.on('whatsappDisconnected', () => {
       console.log('WhatsApp desconectado');
       setIsConnected(false);
-      setIsChecking(false); // Finaliza o estado "Analisando"
+      setIsChecking(false);
+      setShowAlert(false);
     });
 
     socket.on('connect_error', (err) => {
       console.error('Erro de conexão Socket.IO:', err.message);
-      setIsChecking(false); // Finaliza o estado "Analisando" em caso de erro
+      setIsChecking(false);
     });
 
     return () => {
@@ -62,19 +68,22 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
     };
   }, [socket]);
 
-  // Verificar o estado de conexão ao carregar a página
   useEffect(() => {
     const checkConnectionStatus = async () => {
-      setIsChecking(true); // Inicia o estado "Analisando"
+      setIsChecking(true);
       try {
         const response = await api.get('/whatsapp/status');
         console.log('Estado de conexão:', response.data);
         setIsConnected(response.data.isConnected);
+        if (response.data.isConnected) {
+          setShowAlert(true);
+          setTimeout(() => setShowAlert(false), 3000);
+        }
       } catch (error) {
         console.error('Erro ao verificar estado de conexão:', error);
         setIsConnected(false);
       } finally {
-        setIsChecking(false); // Finaliza o estado "Analisando"
+        setIsChecking(false);
       }
     };
 
@@ -82,31 +91,30 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
   }, []);
 
   const handleGenerateQrCode = async () => {
-    setIsChecking(true); // Inicia o estado "Analisando"
+    setIsChecking(true);
     try {
       console.log('Clicou em Gerar QR Code, enviando requisição...');
       setQrCode(null);
       setIsModalOpen(false);
       const response = await api.post('/whatsapp/regenerate-qr');
       console.log('Resposta do backend:', response.data);
-      // O estado "Analisando" será finalizado pelos eventos do Socket.IO
     } catch (error) {
       console.error('Erro ao solicitar QR Code:', error);
-      setIsChecking(false); // Finaliza o estado "Analisando" em caso de erro
+      setIsChecking(false);
     }
   };
 
   const handleDisconnect = async () => {
-    setIsChecking(true); // Inicia o estado "Analisando"
+    setIsChecking(true);
     try {
       console.log('Clicou em Desconectar, enviando requisição...');
       const response = await api.post('/whatsapp/disconnect');
       console.log('Resposta do backend:', response.data);
       setIsConnected(false);
-      setIsChecking(false); // Finaliza o estado "Analisando"
+      setIsChecking(false);
     } catch (error) {
       console.error('Erro ao desconectar:', error);
-      setIsChecking(false); // Finaliza o estado "Analisando" em caso de erro
+      setIsChecking(false);
     }
   };
 
@@ -117,60 +125,105 @@ export const Navbar = ({ activeView, setActiveView }: NavbarProps) => {
 
   return (
     <>
-      <nav className="bg-zinc-800 text-white p-4 flex justify-between items-center">
+      <motion.nav
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="bg-gradient-to-r from-zinc-900 to-zinc-800 text-white p-4 flex justify-between items-center shadow-lg sticky top-0 z-50"
+      >
         <div className="flex space-x-4">
-          <button
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => setActiveView('kanban')}
-            className={`px-4 py-2 rounded ${
-              activeView === 'kanban' ? 'bg-orange-500' : 'bg-gray-600'
-            } hover:bg-orange-600 transition`}
-          >
-            Kanban
-          </button>
-          <button
-            onClick={() => setActiveView('contacts')}
-            className={`px-4 py-2 rounded ${
-              activeView === 'contacts' ? 'bg-orange-500' : 'bg-gray-600'
-            } hover:bg-orange-600 transition`}
-          >
-            Contatos
-          </button>
-        </div>
-        <div className="flex space-x-4 items-center">
-          <button
-            onClick={isConnected ? handleDisconnect : handleGenerateQrCode}
-            disabled={isChecking}
-            className={`px-4 py-2 rounded transition ${
-              isChecking
-                ? 'bg-yellow-500 cursor-not-allowed'
-                : isConnected
-                ? 'bg-red-500 hover:bg-red-600'
-                : 'bg-green-500 hover:bg-green-600'
+            className={`btn px-5 py-2 rounded-full font-medium text-sm uppercase tracking-wide transition-colors duration-300 ${
+              activeView === 'kanban'
+                ? 'btn btn-gradient btn-primary text-white shadow-md'
+                : 'btn btn-gradient text-gray-300 hover:bg-zinc-600'
             }`}
           >
-            {isChecking
-              ? 'Analisando...'
-              : isConnected
-              ? 'Desconectar'
-              : 'Conectar'}
-          </button>
+            Kanban
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setActiveView('contacts')}
+            className={`btn px-5 py-2 rounded-full font-medium text-sm uppercase tracking-wide transition-colors duration-300 ${
+              activeView === 'contacts'
+                ? 'btn btn-gradient btn-primary text-white shadow-md'
+                : 'btn btn-gradient text-gray-300 hover:bg-zinc-600'
+            }`}
+          >
+            Contatos
+          </motion.button>
         </div>
-      </nav>
+        <div className="flex space-x-4 items-center">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={isConnected ? handleDisconnect : handleGenerateQrCode}
+            disabled={isChecking}
+            className={`btn px-5 py-2 rounded-full font-medium text-sm uppercase tracking-wide text-white shadow-md transition-all duration-300 ${
+              isChecking
+                ? 'btn btn-gradient btn-warning cursor-not-allowed opacity-60 animate-pulse'
+                : isConnected
+                ? 'btn btn-gradient btn-error hover:from-red-700 hover:to-red-600'
+                : 'btn btn-gradient btn-success hover:from-green-700 hover:to-green-600'
+            }`}
+          >
+            {isChecking ? 'Analisando...' : isConnected ? 'Desconectar' : 'Conectar'}
+          </motion.button>
+        </div>
+      </motion.nav>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white p-6 rounded shadow-lg">
-            <h2 className="text-lg font-bold mb-4">Conectar WhatsApp</h2>
-            <QRCodeDisplay qrCodeData={qrCode} onReady={handleCloseModal} />
-            <button
-              onClick={handleCloseModal}
-              className="mt-4 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+      {/* Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full"
             >
-              Fechar
-            </button>
-          </div>
-        </div>
-      )}
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Conectar WhatsApp</h2>
+              <QRCodeDisplay qrCodeData={qrCode} onReady={handleCloseModal} />
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={handleCloseModal}
+                className="mt-4 btn bg-gradient-to-r from-red-600 to-red-500 hover:from-red-700 hover:to-red-600 text-white px-5 py-2 rounded-full font-medium uppercase tracking-wide shadow-md transition-all duration-300"
+              >
+                Fechar
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Alerta */}
+      <AnimatePresence>
+        {showAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-4 right-4 z-50"
+          >
+            <div className="bg-gradient-to-r from-green-600 to-green-500 text-white p-3 rounded-lg shadow-lg flex items-center space-x-2">
+              <span className="text-sm font-medium">WhatsApp conectado com sucesso!</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };
